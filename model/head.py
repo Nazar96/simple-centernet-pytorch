@@ -11,8 +11,10 @@ class Head(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(channel, num_classes,
                       kernel_size=1, stride=1, padding=0))
-        self.wh_head = self.ConvReluConv(256, 2)
+        # self.wh_head = self.ConvReluConv(256, 2)
         self.reg_head = self.ConvReluConv(256, 2)
+        self.v2c_head = self.ConvReluConv(256, 8)
+        self.c2v_head = self.ConvReluConv(256, 8)
 
     def ConvReluConv(self, in_channel, out_channel, bias_fill=False, bias_value=0):
         feat_conv = nn.Conv2d(in_channel, in_channel, kernel_size=3, padding=1)
@@ -24,6 +26,8 @@ class Head(nn.Module):
 
     def forward(self, x):
         hm = self.cls_head(x).sigmoid()
-        wh = self.wh_head(x).relu()
+        # wh = self.wh_head(x).relu()
         offset = self.reg_head(x)
-        return hm, wh, offset
+        v2c = self.v2c_head(x)
+        c2v = self.c2v_head(x)
+        return hm, offset, v2c, c2v
