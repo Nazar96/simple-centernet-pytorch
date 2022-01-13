@@ -36,6 +36,9 @@ class WTWDataset(Dataset):
             image, hm, dm, v2c, c2v
         ])
         return image, (hm, dm, v2c, c2v)
+    
+    def __len__(self):
+        return len(self.tables)
 
     @staticmethod
     def to_tensor(elements):

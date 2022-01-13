@@ -106,6 +106,8 @@ class WTW:
     def __get_dimension_mask(points, box_sizes, size: Tuple[int, int]) -> np.ndarray:
         mask = np.zeros((2, size[0], size[1]))
         for (x, y), box_size in zip(points, box_sizes):
+            x = size[1] - 1 if x >= size[1] else x
+            y = size[0] - 1 if y >= size[0] else y
             mask[:, int(y), int(x)] = box_size
         return mask
 
@@ -114,6 +116,8 @@ class WTW:
         mask = np.zeros((8, size[0], size[1]))
         for point, coord in zip(points, coords):
             x, y = point
+            x = size[1] - 1 if x >= size[1] else x
+            y = size[0] - 1 if y >= size[0] else y
             mask[:, int(y), int(x)] = coord
         return mask
 
