@@ -28,7 +28,7 @@ class WTWDataset(Dataset):
         image = cv2.imread(self.image_dir+image_name)
         image = self.prep_image(image)
 
-        hm, dm, v2c, c2v = WTW(self.annotation_dir+xml_name)()
+        hm, dm, v2c, c2v = WTW(self.annotation_dir+xml_name)(self.image_size)
         image, hm, dm, v2c, c2v = self.to_tensor([
             image, hm, dm, v2c, c2v
         ])
