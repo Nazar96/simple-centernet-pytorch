@@ -25,7 +25,7 @@ Config.loss_gamma = 1.
 # dataset
 Config.num_classes = 2
 Config.batch_size = 16  # 128
-# Config.root = '../../dataset/voc/VOCdevkit/VOC2012'
+Config.root = '/home/Tekhta/data/wtw/'
 Config.split = 'trainval'
 Config.resize_size = [512, 512]
 Config.num_workers = 4

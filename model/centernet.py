@@ -2,10 +2,13 @@ from .backbone.renset import ResNet
 from model.decoder import Decoder
 from model.head import Head
 from model.fpn import FPN
-from loss.utils import map2coords
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+import pytorch_lightning as pl
+
+from wtw.dataset import WTWDataset
 
 
 def gather_feature(fmap, index, mask=None, use_transform=False):
@@ -25,7 +28,7 @@ def gather_feature(fmap, index, mask=None, use_transform=False):
     return fmap
 
 
-class CenterNet(nn.Module):
+class CenterNet(pl.LightningModule):
     def __init__(self, cfg):
         super(CenterNet, self).__init__()
         self.backbone = ResNet(cfg.slug)
@@ -38,6 +41,10 @@ class CenterNet(nn.Module):
         self.down_stride = cfg.down_stride
         self.score_th = cfg.score_th
         self.CLASSES_NAME = cfg.CLASSES_NAME
+
+        self.dataset_root = cfg.root
+        self.resize_size = cfg.resize_size
+        self.batch_size = cfg.batch_size
 
     def forward(self, x):
         feats = self.backbone(x)
@@ -118,3 +125,32 @@ class CenterNet(nn.Module):
         topk_xs = gather_feature(topk_xs.reshape(batch, -1, 1), index).reshape(batch, K)
 
         return topk_score, topk_inds, topk_clses, topk_ys, topk_xs
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        plateau_lr = ReduceLROnPlateau(optimizer, patience=5000, verbose=True)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": plateau_lr,
+                "monitor": "train_loss",
+                'interval': "step",
+                "frequency": 1,
+            }
+        }
+
+    def train_dataloader(self):
+        wtw_dataset = WTWDataset(
+                        self.dataset_root+'xml/',
+                        self.dataset_root + 'images/',
+                        self.resize_size,
+        )
+        return DataLoader(wtw_dataset, batch_size=self.batch_size, shuffle=True, num_workers=64)
+
+    def val_dataloader(self):
+        wtw_dataset = WTWDataset(
+                        self.dataset_root+'xml/',
+                        self.dataset_root + 'images/',
+                        self.resize_size,
+        )
+        return DataLoader(wtw_dataset, batch_size=self.batch_size, num_workers=64)

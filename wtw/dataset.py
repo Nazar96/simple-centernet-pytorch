@@ -19,7 +19,10 @@ class WTWDataset(Dataset):
         self.annotation_dir = annotation_dir
         self.image_dir = image_dir
         self.tables = os.listdir(image_dir)
-        self.image_size = image_size
+
+        h, w = image_size
+        self.image_size = (h, w)
+        self.output_size = (h//4, w//4)
 
     def __getitem__(self, item):
         image_name = self.tables[item]
@@ -28,7 +31,7 @@ class WTWDataset(Dataset):
         image = cv2.imread(self.image_dir+image_name)
         image = self.prep_image(image)
 
-        hm, dm, v2c, c2v = WTW(self.annotation_dir+xml_name)(self.image_size)
+        hm, dm, v2c, c2v = WTW(self.annotation_dir+xml_name)(self.output_size)
         image, hm, dm, v2c, c2v = self.to_tensor([
             image, hm, dm, v2c, c2v
         ])
