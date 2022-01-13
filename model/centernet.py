@@ -1,14 +1,16 @@
-from .backbone.renset import ResNet
-from model.decoder import Decoder
-from model.head import Head
-from model.fpn import FPN
 import torch
+from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import pytorch_lightning as pl
 
 from wtw.dataset import WTWDataset
+from loss.losses import modified_focal_loss
+from .backbone.renset import ResNet
+from model.decoder import Decoder
+from model.head import Head
+from model.fpn import FPN
 
 
 def gather_feature(fmap, index, mask=None, use_transform=False):
@@ -45,6 +47,9 @@ class CenterNet(pl.LightningModule):
         self.dataset_root = cfg.root
         self.resize_size = cfg.resize_size
         self.batch_size = cfg.batch_size
+
+        self.focal_loss = modified_focal_loss
+        self.l1_loss = nn.L1Loss()
 
     def forward(self, x):
         feats = self.backbone(x)
@@ -99,6 +104,23 @@ class CenterNet(pl.LightningModule):
 
             detects.append([batch_boxes, batch_scores, batch_clses, pred_hm[batch] if return_hm else None])
         return detects
+
+    def training_step(self, batch, batch_idx):
+        image, (gt_hm, gt_dm, gt_v2c, gt_c2v) = batch
+        pred_hm, pred_dm, pred_v2c, pred_c2v = self.forward(image)
+
+        hm_loss = self.focal_loss(pred_hm, gt_hm)
+        dm_loss = self.l1_loss(pred_dm, gt_dm)
+        v2c_loss = self.l1_loss(pred_v2c, gt_v2c)
+        c2v_loss = self.l1_loss(pred_c2v, gt_c2v)
+
+        loss = hm_loss + dm_loss + v2c_loss + c2v_loss
+        self.logger.experiment.add_scalar("hm_loss/train", hm_loss, self.global_step)
+        self.logger.experiment.add_scalar("dm_loss/train", dm_loss, self.global_step)
+        self.logger.experiment.add_scalar("v2c_loss/train", v2c_loss, self.global_step)
+        self.logger.experiment.add_scalar("c2v_loss/train", c2v_loss, self.global_step)
+        self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
+        return loss
 
     def pool_nms(self, hm, pool_size=3):
         pad = (pool_size - 1) // 2
