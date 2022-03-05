@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from wtw.dataset import WTWDataset
 from loss.losses import modified_focal_loss
@@ -50,6 +51,8 @@ class CenterNet(pl.LightningModule):
 
         self.focal_loss = modified_focal_loss
         self.l1_loss = nn.L1Loss()
+        
+        self.learning_rate = cfg.lr
 
     def forward(self, x):
         feats = self.backbone(x)
@@ -106,20 +109,20 @@ class CenterNet(pl.LightningModule):
         return detects
 
     def training_step(self, batch, batch_idx):
-        image, (gt_hm, gt_dm, gt_v2c, gt_c2v) = batch
-        pred_hm, pred_dm, pred_v2c, pred_c2v = self.forward(image)
+        image, (gt_hm, gt_v2c, gt_c2v) = batch
+        pred_hm, pred_v2c, pred_c2v = self.forward(image)
 
         hm_loss = self.focal_loss(pred_hm, gt_hm)
-        dm_loss = self.l1_loss(pred_dm, gt_dm)
-        v2c_loss = self.l1_loss(pred_v2c, gt_v2c)
-        c2v_loss = self.l1_loss(pred_c2v, gt_c2v)
+#         dm_loss = self.l1_loss(pred_dm, gt_dm)
+        v2c_loss = self.l1_loss(pred_v2c, gt_v2c) * 0
+        c2v_loss = self.l1_loss(pred_c2v, gt_c2v) * 100
 
-        loss = hm_loss + dm_loss + v2c_loss + c2v_loss
+        loss = hm_loss + c2v_loss
         self.logger.experiment.add_scalar("hm_loss/train", hm_loss, self.global_step)
-        self.logger.experiment.add_scalar("dm_loss/train", dm_loss, self.global_step)
-        self.logger.experiment.add_scalar("v2c_loss/train", v2c_loss, self.global_step)
+#         self.logger.experiment.add_scalar("dm_loss/train", dm_loss, self.global_step)
+#         self.logger.experiment.add_scalar("v2c_loss/train", v2c_loss, self.global_step)
         self.logger.experiment.add_scalar("c2v_loss/train", c2v_loss, self.global_step)
-        self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
+        self.log('train_loss', loss)
         return loss
 
     def pool_nms(self, hm, pool_size=3):
@@ -147,6 +150,21 @@ class CenterNet(pl.LightningModule):
         topk_xs = gather_feature(topk_xs.reshape(batch, -1, 1), index).reshape(batch, K)
 
         return topk_score, topk_inds, topk_clses, topk_ys, topk_xs
+    
+    def coords(self, heatmap, topK=1_000):
+        nms_hm = self.pool_nms(heatmap, 3)
+        b, c, output_h, output_w = nms_hm.shape
+        scores, index, clses, ys, xs = self.topk_score(nms_hm, K=topK)
+
+        xs = xs.view(b, topK, 1)
+        ys = ys.view(b, topK, 1)
+
+        scores = scores.reshape(b, topK, 1)
+
+        clses = clses.reshape(b, topK, 1).float()
+        scores = scores.reshape(b, topK, 1)
+        coords = torch.cat([xs, ys], dim=2)
+        return coords, scores, clses
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
@@ -174,5 +192,15 @@ class CenterNet(pl.LightningModule):
                         self.dataset_root+'xml/',
                         self.dataset_root + 'images/',
                         self.resize_size,
+                        use_aug=False,
         )
-        return DataLoader(wtw_dataset, batch_size=self.batch_size, num_workers=64)
+        return DataLoader(wtw_dataset, batch_size=128, shuffle=True, num_workers=64)
+    
+    def configure_callbacks(self):
+        checkpoint = ModelCheckpoint(
+            monitor="train_loss",
+            dirpath="/home/Tekhta/simple-centernet-pytorch/checkpoint/",
+            every_n_train_steps=500,
+        )
+        lr_monitor = LearningRateMonitor(logging_interval='step')
+        return [checkpoint, lr_monitor]
