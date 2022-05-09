@@ -3,6 +3,7 @@ import xmltodict
 from collections import OrderedDict
 import numpy as np
 import cv2
+from collections import defaultdict
 
 
 def load_wtw_annotation(file_path: str) -> OrderedDict:
@@ -12,43 +13,132 @@ def load_wtw_annotation(file_path: str) -> OrderedDict:
     return data['annotation']
 
 
+def _get_cell_dict(bndbox):
+    p1 = float(bndbox['x1']), float(bndbox['y1'])
+    p2 = float(bndbox['x2']), float(bndbox['y2'])
+    p3 = float(bndbox['x3']), float(bndbox['y3'])
+    p4 = float(bndbox['x4']), float(bndbox['y4'])
+    tmp = {
+        'vertices': [p1, p2, p3, p4],
+        'center': (
+            (p1[0] + p2[0] + p3[0] + p4[0]) / 4,
+            (p1[1] + p2[1] + p3[1] + p4[1]) / 4
+        ),
+        'size': (
+            abs(float(bndbox['xmax']) - float(bndbox['xmin'])),
+            abs(float(bndbox['ymax']) - float(bndbox['ymin']))
+        ),
+    }
+    return tmp
+
+
+def get_cells(data):
+    result = []
+    cells = data['object']
+    if not isinstance(cells, list):
+        cells = cells['item']
+
+    for cell in cells:
+        bndbox = cell['bndbox']
+        cell_dict = _get_cell_dict(bndbox)
+        result.append(cell_dict)
+    return result
+
+
+def get_keypoints(cells, h, w, pad=2):
+    labels = []
+    tmp_keypoints = []
+    for i, cell in enumerate(cells):
+        for j, v in enumerate(cell['vertices']):
+            tmp_keypoints.append(v)
+            labels.append(('vert', i, j))
+        tmp_keypoints.append(cell['center'])
+        labels.append(('center', i))
+
+    keypoints = []
+    for x, y in tmp_keypoints:
+        x, y = max(pad, min(x, w - pad)), max(pad, min(y, h - pad))
+        keypoints.append((x, y))
+    return keypoints, labels
+
+
+def keypoints2cells(kpoints):
+    tmp_cells = defaultdict(list)
+    for i, p in enumerate(kpoints):
+        idx = i//5
+        tmp_cells[idx].append(p)
+    tmp_cells = list(tmp_cells.values())
+
+    tr_cells = []
+    for cell in tmp_cells:
+        if len(cell) == 5:
+            tr_cell = {}
+            tr_cell['vertices'] = cell[:4]
+            tr_cell['center'] = cell[4]
+            tr_cells.append(tr_cell)
+    return tr_cells
+
+    # @staticmethod
+    # def get_cells(
+    #         data: OrderedDict,
+    #         size: Optional[Tuple[int, int]] = None,
+    # ) -> List[Dict]:
+    #     width = int(data['size']['width'])
+    #     height = int(data['size']['height'])
+    #
+    #     kx, ky = 1, 1
+    #     if size is not None:
+    #         kx, ky = size[0]/width, size[1]/height
+    #
+    #     result = []
+    #     for cell in data['object']:
+    #         bndbox = cell['bndbox']
+    #         p1 = float(bndbox['x1'])*kx, float(bndbox['y1'])*ky
+    #         p2 = float(bndbox['x2'])*kx, float(bndbox['y2'])*ky
+    #         p3 = float(bndbox['x3'])*kx, float(bndbox['y3'])*ky
+    #         p4 = float(bndbox['x4'])*kx, float(bndbox['y4'])*ky
+    #         tmp = {
+    #             'vertices': [p1, p2, p3, p4],
+    #             'center': (
+    #                 (p1[0] + p2[0] + p3[0] + p4[0]) / 4,
+    #                 (p1[1] + p2[1] + p3[1] + p4[1]) / 4
+    #             ),
+    #             'size': (
+    #                 abs(float(bndbox['xmax']) - float(bndbox['xmin']))*kx,
+    #                 abs(float(bndbox['ymax']) - float(bndbox['ymin']))*ky
+    #             ),
+    #         }
+    #
+    #         result.append(tmp)
+    #     return result
+
+
 class WTW:
-    def __init__(self, file: str):
-        self.data = load_wtw_annotation(file)
+    def __init__(self):
+        pass
 
-    @staticmethod
-    def get_cells(
-            data: OrderedDict,
-            size: Optional[Tuple[int, int]] = None,
-    ) -> List[Dict]:
-        width = int(data['size']['width'])
-        height = int(data['size']['height'])
+#     @staticmethod
+#     def __get_cells(
+#             data: OrderedDict,
+#             size: Optional[Tuple[int, int]] = None,
+#     ) -> List[Dict]:
+#         width = int(data['size']['width'])
+#         height = int(data['size']['height'])
 
-        kx, ky = 1, 1
-        if size is not None:
-            kx, ky = size[0]/width, size[1]/height
+#         kx, ky = 1, 1
+#         if size is not None:
+#             kx, ky = size[0]/width, size[1]/height
 
-        result = []
-        for cell in data['object']:
-            bndbox = cell['bndbox']
-            p1 = float(bndbox['x1'])*kx, float(bndbox['y1'])*ky
-            p2 = float(bndbox['x2'])*kx, float(bndbox['y2'])*ky
-            p3 = float(bndbox['x3'])*kx, float(bndbox['y3'])*ky
-            p4 = float(bndbox['x4'])*kx, float(bndbox['y4'])*ky
-            tmp = {
-                'vertices': [p1, p2, p3, p4],
-                'center': (
-                    (p1[0] + p2[0] + p3[0] + p4[0]) / 4,
-                    (p1[1] + p2[1] + p3[1] + p4[1]) / 4
-                ),
-                'size': (
-                    abs(float(bndbox['xmax']) - float(bndbox['xmin']))*kx,
-                    abs(float(bndbox['ymax']) - float(bndbox['ymin']))*ky
-                ),
-            }
-
-            result.append(tmp)
-        return result
+#         result = []
+#         cells = data['object']
+#         if not isinstance(cells, list):
+#             cells = cells['item']
+            
+#         for cell in cells:
+#             bndbox = cell['bndbox']
+#             cell_dict = _get_cell_dict(bndbox, kx, ky)
+#             result.append(cell_dict)
+#         return result
 
     @staticmethod
     def __get_vert2center(cells: List[Dict], size: Tuple[int, int]) -> Tuple[np.ndarray, np.ndarray]:
@@ -93,14 +183,17 @@ class WTW:
         return np.asarray(vertices), np.asarray(centers)
 
     @staticmethod
-    def __get_heatmap(points: np.ndarray, size: Tuple[int, int], kernel_size: int = 3) -> np.ndarray:
-        heatmap = np.zeros(size)
+    def __get_heatmap(points: np.ndarray, size: Tuple[int, int], kernel_size: int = 3, k: int = 4) -> np.ndarray:
+        h, w = size
+        h, w = h//k, w//k
+        heatmap = np.zeros((h, w))
         for x, y in points:
-            heatmap = cv2.circle(heatmap, (int(x), int(y)), 2, 1, -1)
+            heatmap = cv2.circle(heatmap, (int(x/k), int(y/k)), 1, 1, -1)
         heatmap = cv2.blur(heatmap, (kernel_size, kernel_size))
         heatmap -= heatmap.min()
         heatmap /= heatmap.max()
         return heatmap
+
 
     @staticmethod
     def __get_dimension_mask(points, box_sizes, size: Tuple[int, int], pad=5) -> np.ndarray:
@@ -112,40 +205,63 @@ class WTW:
             mask[:, y_min:y_max, x_min:x_max] = box_size
         return mask
 
+#     @staticmethod
+#     def __get_dimension_mask(points, box_sizes, size: Tuple[int, int], pad: int = 2, k: int = 4) -> np.ndarray:
+#         h, w = size
+#         h, w = h//k, w//k
+#         mask = np.zeros((2, h, w))
+#         for (x, y), box_size in zip(points, box_sizes):
+#             x, y = int(x//k), int(y//k)
+#             for i in range(len(box_size)):
+#                 x_min, x_max = max(0, x - pad), min(size[1] - 1, x + pad)
+#                 y_min, y_max = max(0, y - pad), min(size[0] - 1, y + pad)
+#                 mask[i, y_min:y_max, x_min:x_max] = box_size[i]
+#         return mask
+
+
     @staticmethod
-    def __get_coord_mask(points, coords, size: Tuple[int, int]) -> np.ndarray:
-        mask = np.zeros((8, size[0], size[1]))
+    def __get_coord_mask(points, coords, size: Tuple[int, int], pad: int = 2, k: int = 4) -> np.ndarray:
+        h, w = size
+        h, w = h//k, w//k
+        mask = np.zeros((8, h, w))
         for point, coord in zip(points, coords):
             x, y = point
-            x = size[1] - 1 if x >= size[1] else x
-            y = size[0] - 1 if y >= size[0] else y
-            mask[:, int(y), int(x)] = coord
+            x, y = int(x/k), int(y/k)
+            for i in range(len(coord)):
+                x_min, x_max = max(0, x - pad), min(size[1] - 1, x + pad)
+                y_min, y_max = max(0, y - pad), min(size[0] - 1, y + pad)
+                mask[i, y_min:y_max, x_min:x_max] = coord[i]
         return mask
 
-    def __call__(self, size: Optional[Tuple[int, int]] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
-        if size is None:
-            size = (int(self.data['size']['height']), int(self.data['size']['width']))
+    # def __call__(self, size: Optional[Tuple[int, int]] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    #
+    #     if size is None:
+    #         size = (int(self.data['size']['height']), int(self.data['size']['width']))
+    #
+    #     cells = self.get_cells(self.data, size)
 
-        cells = self.get_cells(self.data, size)
+    def __call__(self, cells, size=(512, 512), k=4) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+
 
         vertices = []
         for c in cells:
             vertices += c['vertices']
         vertices = np.asarray(vertices)
         centers = np.asarray([c['center'] for c in cells])
+
         sizes = np.asarray([np.array(c['size'])/size for c in cells])
 
-        vertice_heatmap = self.__get_heatmap(vertices, size)
-        center_heatmap = self.__get_heatmap(centers, size)
+
+        vertice_heatmap = self.__get_heatmap(vertices, size, k=k)
+        center_heatmap = self.__get_heatmap(centers, size, k=k)
 
         v, c = self.__get_vert2center(cells, size)
-        v2c_heatmap = self.__get_coord_mask(v, c, size)
+        v2c_heatmap = self.__get_coord_mask(v, c, size, k=k)
 
         v, c = self.__get_center2vert(cells, size)
-        c2v_heatmap = self.__get_coord_mask(c, v, size)
+        c2v_heatmap = self.__get_coord_mask(c, v, size, k=k)
 
         heatmap = np.asarray([vertice_heatmap, center_heatmap])
-        dimension_mask = self.__get_dimension_mask(centers, sizes, size)
 
-        return heatmap, dimension_mask, v2c_heatmap, c2v_heatmap
+        return heatmap, v2c_heatmap, c2v_heatmap

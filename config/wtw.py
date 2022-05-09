@@ -25,7 +25,7 @@ Config.loss_gamma = 1.
 # dataset
 Config.num_classes = 2
 Config.batch_size = 16  # 128
-Config.root = '/home/Tekhta/data/wtw/'
+Config.root = '/home/Tekhta/data/wtw_ptn/'
 Config.split = 'trainval'
 Config.resize_size = [512, 512]
 Config.num_workers = 4
@@ -34,7 +34,7 @@ Config.std = [0.28863828, 0.27408164, 0.27809835]
 
 # train
 Config.optimizer = 'AdamW'
-Config.lr = 1e-3
+Config.lr = 1e-5
 Config.AMSGRAD = True
 
 Config.max_iter = 45000
