@@ -17,7 +17,7 @@ class WTW:
         self.data = load_wtw_annotation(file)
 
     @staticmethod
-    def __get_cells(
+    def get_cells(
             data: OrderedDict,
             size: Optional[Tuple[int, int]] = None,
     ) -> List[Dict]:
@@ -103,12 +103,13 @@ class WTW:
         return heatmap
 
     @staticmethod
-    def __get_dimension_mask(points, box_sizes, size: Tuple[int, int]) -> np.ndarray:
+    def __get_dimension_mask(points, box_sizes, size: Tuple[int, int], pad=5) -> np.ndarray:
         mask = np.zeros((2, size[0], size[1]))
         for (x, y), box_size in zip(points, box_sizes):
-            x = size[1] - 1 if x >= size[1] else x
-            y = size[0] - 1 if y >= size[0] else y
-            mask[:, int(y), int(x)] = box_size
+            x, y = int(x), int(y)
+            x_min, x_max = max(0, x - pad), min(size[1] - 1, x + pad)
+            y_min, y_max = max(0, y - pad), min(size[0] - 1, y + pad)
+            mask[:, y_min:y_max, x_min:x_max] = box_size
         return mask
 
     @staticmethod
@@ -122,17 +123,18 @@ class WTW:
         return mask
 
     def __call__(self, size: Optional[Tuple[int, int]] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        cells = self.__get_cells(self.data, size)
+
+        if size is None:
+            size = (int(self.data['size']['height']), int(self.data['size']['width']))
+
+        cells = self.get_cells(self.data, size)
 
         vertices = []
         for c in cells:
             vertices += c['vertices']
         vertices = np.asarray(vertices)
         centers = np.asarray([c['center'] for c in cells])
-        sizes = np.asarray([c['size'] for c in cells])
-
-        if size is None:
-            size = (int(self.data['size']['height']), int(self.data['size']['width']))
+        sizes = np.asarray([np.array(c['size'])/size for c in cells])
 
         vertice_heatmap = self.__get_heatmap(vertices, size)
         center_heatmap = self.__get_heatmap(centers, size)

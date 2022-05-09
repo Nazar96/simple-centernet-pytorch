@@ -66,20 +66,20 @@ class CenterNet(pl.LightningModule):
             feat = self.fpn(feats)
         else:
             feat = feats[-1]
-        pred_hm, pred_wh, pred_offset = self.head(self.upsample(feat))
+        pred_hm, pred_dm, pred_v2c, pred_c2v = self.head(self.upsample(feat))
 
         _, _, h, w = img.shape
         b, c, output_h, output_w = pred_hm.shape
         pred_hm = self.pool_nms(pred_hm)
         scores, index, clses, ys, xs = self.topk_score(pred_hm, K=topK)
-
-        reg = gather_feature(pred_offset, index, use_transform=True)
-        reg = reg.reshape(b, topK, 2)
-        xs = xs.view(b, topK, 1) + reg[:, :, 0:1]
-        ys = ys.view(b, topK, 1) + reg[:, :, 1:2]
-
-        wh = gather_feature(pred_wh, index, use_transform=True)
-        wh = wh.reshape(b, topK, 2)
+        #
+        # reg = gather_feature(pred_offset, index, use_transform=True)
+        # reg = reg.reshape(b, topK, 2)
+        # xs = xs.view(b, topK, 1) + reg[:, :, 0:1]
+        # ys = ys.view(b, topK, 1) + reg[:, :, 1:2]
+        #
+        # wh = gather_feature(pred_wh, index, use_transform=True)
+        # wh = wh.reshape(b, topK, 2)
 
         clses = clses.reshape(b, topK, 1).float()
         scores = scores.reshape(b, topK, 1)
